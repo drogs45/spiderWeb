@@ -186,12 +186,14 @@ conti (a,Response b c d e) = e
 
 -- Visita un link y retorna contenido del request.
 visitarp :: String -> Int -> IO ()
-visitar _ 0 = print "fin"
-visitarp s r = conti rsp
+visitarp _ 0 = print "fin"
+visitarp s r = uri
                where
-                rsp = Network.Browser.browse $ do
+                do
+                rsp <- Network.Browser.browse $ do
                  setAllowRedirects True -- handle HTTP redirects
                  request $ getRequest s
+                 (uri,response) <- rsp
              {--case rsp of
               (a,Response b c d e) -> if "4" `isPrefixOf` (toerr b) || 
                                          "5" `isPrefixOf` (toerr b)
