@@ -181,23 +181,25 @@ uritostring :: URI -> String
 uritostring (URI a (Just (URIAuth t s u)) c d e) = a++t++s++u++c++d++e
 uritostring (URI a Nothing c d e) = a++c++d++e
 
-conti :: (URI,Response String) -> String
-conti (a,Response b c d e) = e
+conti :: IO(URI,Response String) -> IO(String)
+conti a = do
+  (w,Response b c d e) <- a
+  return e
 
-{{-- Visita un link y retorna contenido del request.
-visitarp :: String -> Int -> IO ()
-visitarp _ 0 = print "fin"
-visitarp s r =  do
-                rsp <- Network.Browser.browse $ do
-                 setAllowRedirects True -- handle HTTP redirects
-                 request $ getRequest s
-                (uri,response) <- rsp--}
+-- Visita un link y retorna contenido del request.
+visitarp :: String -> IO (String)
+visitarp s = conti rsp
+               where
+                rsp =
+                  Network.Browser.browse $ do
+                  setAllowRedirects True -- handle HTTP redirects
+                  request $ getRequest s
+
              {--case rsp of
               (a,Response b c d e) -> if "4" `isPrefixOf` (toerr b) || 
                                          "5" `isPrefixOf` (toerr b)
                                        then print $ "Error:" ++ (toerr b) ++ " " ++ c
                                        else map visitarp (parseLinks (uritostring a) e "Error de Parseo") --}
-             
                
 {-- Recibe Request y retorna contenido o error.
 cont :: IO (URI,Response String) -> String
@@ -205,9 +207,25 @@ cont IO (a,Response b c d e) = if "4" `isPrefixOf` (toerr b) ||
                                    "5" `isPrefixOf` (toerr b)
                                  then "Error:" ++ (toerr b) ++ " " ++ c
                                  else e--}
+{--
+data = 
+  Estado 
+    { [String] :: getURLVisitados
+      [String] :: getURLValidos
+    }
+--}
+
+
+
+--fbind :: Estado -> String -> Estado
+--fbind a s = 
+
 
 main = do
        p <- getArgs -- argumento página raiz
+       a <- visitarp $ head p
+       print a
+{--
        let s = p!!0
        rsp <- Network.Browser.browse $ do
                setAllowRedirects True -- handle HTTP redirects
@@ -217,6 +235,7 @@ main = do
                                    "5" `isPrefixOf` (toerr b)
                                  then print $ "Error:" ++ (toerr b) ++ " " ++ c
                                  else print e
+--}
        -- a <- fmap (drop 100) (getResponseBody (snd rsp))
        {--case rsp of
         Left (s) -> print s
