@@ -184,16 +184,14 @@ uritostring (URI a Nothing c d e) = a++c++d++e
 conti :: (URI,Response String) -> String
 conti (a,Response b c d e) = e
 
--- Visita un link y retorna contenido del request.
+{{-- Visita un link y retorna contenido del request.
 visitarp :: String -> Int -> IO ()
 visitarp _ 0 = print "fin"
-visitarp s r = uri
-               where
-                do
+visitarp s r =  do
                 rsp <- Network.Browser.browse $ do
                  setAllowRedirects True -- handle HTTP redirects
                  request $ getRequest s
-                 (uri,response) <- rsp
+                (uri,response) <- rsp--}
              {--case rsp of
               (a,Response b c d e) -> if "4" `isPrefixOf` (toerr b) || 
                                          "5" `isPrefixOf` (toerr b)
