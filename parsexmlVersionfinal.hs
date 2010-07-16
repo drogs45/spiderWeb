@@ -16,10 +16,10 @@
    ) where --}
 
 import Prelude
-
 import Control.Concurrent.MVar
 import Control.Concurrent
 import Control.Monad
+import Control.Monad.State
 import Control.Monad.Trans
 import Data.Either
 import Network.HTTP as H
@@ -30,7 +30,8 @@ import Text.XML.HaXml.Parse
 import Text.XML.HaXml.Html.Generate(showattr)
 import System
 import Data.Char
-import Data.List( isInfixOf, isPrefixOf)
+import Data.List
+import Data.List( isInfixOf, isPrefixOf, isSuffixOf , nub)
 
 ----------------
 filtroGeneral :: String -> (String -> Bool) -> Bool
@@ -76,8 +77,9 @@ links a [] = []
 links a (x:xs) =
   case "http" `isPrefixOf` x of
     True  -> x :links a xs
-    False -> (a++x) : links a xs
-
+    False -> if "/" `isSuffixOf` a || "/" `isPrefixOf` x
+      then (a++x):links a xs
+      else (a++('/':x)) : links a xs
 -- Dado el contenido de una página obtenido al parsearla se retorna una lista de
 -- String con el texto plano, extraido de todos los tags.
 getText :: Content a -> [String]
@@ -114,7 +116,7 @@ valor (AttValue (algo:_)) = case algo of
 
 -- Dado el texto del HTML y un mensaje extra de error, retorno lista de links.
 parseLinks :: String -> String -> String -> [String]
-parseLinks linkp content name = links linkp $ getLinks doc
+parseLinks linkp content name = nub $ links linkp $ getLinks doc
 
         where parseResult = htmlParse name (stripUnicodeBOM content)
               doc = getContent parseResult
@@ -181,67 +183,79 @@ uritostring :: URI -> String
 uritostring (URI a (Just (URIAuth t s u)) c d e) = a++t++s++u++c++d++e
 uritostring (URI a Nothing c d e) = a++c++d++e
 
-conti :: IO(URI,Response String) -> IO(String)
-conti a = do
-  (w,Response b c d e) <- a
-  return e
+data Telarana = Telarana { getUrlPorVisitar :: [String],
+                         --getUrlVisitados :: [(String,String)],
+                         getUrlVisitados :: [String],
+                         getUrlValidos :: [String] ,
+                         funValidos :: [(String -> Bool)]
+                         }
 
+ejec :: [(String -> Bool)] -> String -> Bool
+ejec [] s = True
+ejec (x:xs) s =
+  if x s then ejec xs s
+    else False
+
+run :: StateT Telarana IO () --[String]
+--run :: [String] -> StateT Telarana IO () --[String]
+run = do
+  arana <- get
+  (b,a) <- liftM (foldl' (alpha $ funValidos arana) ([],[])) $ liftIO $ mapM ca $ getUrlPorVisitar arana
+  put $ arana { getUrlPorVisitar = a, getUrlVisitados = b++(getUrlVisitados arana) }
+  where
+    alpha :: [(String -> Bool)] -> ([String],[String]) -> ((String,String),[String]) -> ([String],[String])
+    alpha [] (a,b) ((c,e),d) = (c:a,d++b)
+    alpha f (a,b) ((c,e),d)  = 
+      case ejec f e of 
+        True -> (c:a,d++b)
+        False -> (a,d++b)
+
+gen :: Int -> StateT Telarana IO ()
+gen a = foldl1 (>>) $ replicate a run
+
+ca :: String -> IO (((String,String),[String]))
+ca string = catch (visitar string) (\e -> return (("",""),[]))
+
+ {--
+move :: StateT Telarana IO ()
+move a = get >>= run 
+do
+  (a,b) <- get 
+  put run $ getUrlPorVisitar b
+{--do
+  (a,b) <- get
+  put run
+--}
+--}
 -- Visita un link y retorna contenido del request.
-visitarp :: String -> IO (String)
-visitarp s = conti rsp
+visitar :: String -> IO (((String,String),[String]))
+visitar s = visi rsp
                where
                 rsp =
                   Network.Browser.browse $ do
                   setAllowRedirects True -- handle HTTP redirects
                   request $ getRequest s
+                visi :: IO(URI,Response String) -> IO (((String,String),[String]))
+                visi a = do
+                  (w,Response b c d e) <- a
+                  if  "4" `isPrefixOf` (toerr b) || 
+                      "5" `isPrefixOf` (toerr b)
+                      then return $ ((s,"Error:" ++ (toerr b) ++ " " ++ c),[])
+                      else return ((s,e),parseLinks s e "")
 
-             {--case rsp of
-              (a,Response b c d e) -> if "4" `isPrefixOf` (toerr b) || 
-                                         "5" `isPrefixOf` (toerr b)
-                                       then print $ "Error:" ++ (toerr b) ++ " " ++ c
-                                       else map visitarp (parseLinks (uritostring a) e "Error de Parseo") --}
-               
-{-- Recibe Request y retorna contenido o error.
-cont :: IO (URI,Response String) -> String
-cont IO (a,Response b c d e) = if "4" `isPrefixOf` (toerr b) || 
-                                   "5" `isPrefixOf` (toerr b)
-                                 then "Error:" ++ (toerr b) ++ " " ++ c
-                                 else e--}
-{--
-data = 
-  Estado 
-    { [String] :: getURLVisitados
-      [String] :: getURLValidos
-    }
---}
+main = do
+  p <- getArgs -- argumento página raiz
+  --(a,b) <- runStateT run $ Telarana { getUrlPorVisitar = p , getUrlVisitados = [] , getUrlValidos = [] , funValidos = [(\s -> True)] }
+  let est = gen 2
+  (a,b) <- runStateT est $ Telarana { getUrlPorVisitar = p , getUrlVisitados = [] , getUrlValidos = [] , funValidos = [(\s -> True)] }
 
+  print $ getUrlPorVisitar b -- b -- $ parseLinks (head p) a "Error:"
+  -- a <- fmap (drop 100) (getResponseBody (snd rsp))
+  -- print $ parseLinks "http://www.haskell.org/" x "error"
+  --let a = parseText x "error"
+  -- print $ a--}
 
+--runEstado = runState ()
 
 --fbind :: Estado -> String -> Estado
 --fbind a s = 
-
-
-main = do
-       p <- getArgs -- argumento página raiz
-       a <- visitarp $ head p
-       print a
-{--
-       let s = p!!0
-       rsp <- Network.Browser.browse $ do
-               setAllowRedirects True -- handle HTTP redirects
-               request $ getRequest s
-       case rsp of
-        (a,Response b c d e) -> if "4" `isPrefixOf` (toerr b) || 
-                                   "5" `isPrefixOf` (toerr b)
-                                 then print $ "Error:" ++ (toerr b) ++ " " ++ c
-                                 else print e
---}
-       -- a <- fmap (drop 100) (getResponseBody (snd rsp))
-       {--case rsp of
-        Left (s) -> print s
-        Right (Response b c d e) -> if (toerr b) == "200"
-                                     then print e 
-                                     else  print $ (toerr b) ++ " " ++ c
-       -- print $ parseLinks "http://www.haskell.org/" x "error"
-       --let a = parseText x "error"
-       -- print $ a--}
