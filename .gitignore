@@ -1,3 +1,6 @@
 *.hs~
 *.hi
 *.o
+.*.swp
+.*.swp~
+parsexmlVersionfinal
